@@ -8,30 +8,7 @@
   - You can run the following to check your cluster-bound `ClusterRoles`:
 
     ```sh
-    function getRoles() {
-        local kind="${1}"
-        local name="${2}"
-        local namespace="${3:-}"
-
-        oc get clusterrolebinding -o json | jq -r "
-          .items[]
-          |
-          select(
-            .subjects[]?
-            |
-            select(
-                .kind == \"${kind}\"
-                and
-                .name == \"${name}\"
-                and
-                (if .namespace then .namespace else \"\" end) == \"${namespace}\"
-            )
-          )
-          |
-          (.roleRef.kind + \"/\" + .roleRef.name)
-        "
-    }
-    getRoles User $(oc whoami)
+    ./get_roles.sh User $(oc whoami)
     ```
 
   - Your user also might be a member of a `Group` with this binding, so you can get false negatives with the above command.
