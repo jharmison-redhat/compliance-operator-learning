@@ -76,7 +76,7 @@ The bundles themselves are not terrifically useful for us. The real advantages c
 
 Out of the box profiles included as of Compliance Operator release 0.1.29 are the Center for Internet Security (CIS) benchmarks commonly used for commercial systems, the Essential Eight (E8) benchmarks for the Australian government, and the FISMA moderate systems requirements from NIST SP 800-53.
 
-#### Extending the out-of-the-box
+## Extending the out-of-the-box
 
 First off, the [Compliance As Code (CaC) project on GitHub](https://github.com/ComplianceAsCode/content) houses the upstreams for all of the generated content. If you wanted to generate your own content, you could do so. I would recommend starting from the [Developer Guide](https://github.com/ComplianceAsCode/content/tree/master/docs/manual/developer) to understand how to build compliance content for this framework, and encourage you to contribute your work in collaboration with the upstream.
 
@@ -90,8 +90,56 @@ Because this build is directly off of the master branch of the upstream, its sta
 
 For our purposes today, though, we're going to use this master branch to explore some coming changes in a future release of the supported content.
 
-Kick off a fresh build from the `BuildConfig` by running the following:
+Kick off (and finish) a fresh build from the `BuildConfig` by running the following:
 
 ```sh
 oc start-build cac-build
+while ! oc get build cac-build-1 | grep -qF Complete; do
+    echo -n '.'
+    sleep 5
+done; echo
 ```
+
+### Configuring our new ProfileBundles
+
+To point a new `ProfileBundle` object at the freshly built upstream images, we just need to point them to the `ImageStream` that the `cac-build` pushes to.
+
+```sh
+oc apply -f 01-profilebundles.yaml
+```
+
+We can watch the new `ProfileBundles` to see the operator's progress in unpacking and parsing the datastreams:
+
+```sh
+oc get profilebundle -w
+```
+
+In order to see the unpacked profiles, we can look at just the ones from our new `upstream-` `ProfileBundle`:
+
+```sh
+oc get profile.compliance | grep -F upstream-
+```
+
+There are more profiles in the upstream than in the supported downstream - because this is changing all of the time. It may make sense to look at upstream content at some point, or you could do like we mentioned earlier and work with support.
+
+### Looking into a profile
+
+Let's see what's in our new stig profile.
+
+```sh
+oc describe profile.compliance upstream-rhcos4-stig | less
+```
+
+The fields on this resource describe where this profile came from, who's responsible for it, etc.
+
+### ProfileBundles - more than Profiles
+
+The operator parses the datastream xml files in the bundles and unpacks a lot more than just the profiles from them. Profiles are a collection of rules, and those rules are all bundled into the compiled datastream as well.
+
+```sh
+oc get rule.compliance | grep -F upstream- | wc -l
+```
+
+The XML has a ton of information in it - including remediation recommendations for these rules! Not all of the rules that we've just imported are for RHCOS, though. Some of them are for the Kubernetes platform on top - due to that privilege split.
+
+## Suites - the basic block that ties profiles together.

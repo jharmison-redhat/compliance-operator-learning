@@ -1,13 +1,5 @@
 Remainder outline:
 
-- `oc apply -f 01-profilebundles.yaml`
-- ComplianceSuite == ocs4 and rhcos4 profiles at same level
-- `oc get profile | grep -F upstream-`
-- More coming all the time
-- `oc describe profile.compliance upstream-rhcos4-stig | less`
-- ProfileBundles are more than Profiles - the parsed results of the profiles come with
-- `oc get rule.compliance | grep -F upstream- | wc -l`
-- The XML has a lot
 - ComplianceSuite is a collection of Scan definitions that are paired together, but they're very low level
 - `cat 02-compliancesuite.yaml`
 - `oc apply -f 02-compliancesuite.yaml`
