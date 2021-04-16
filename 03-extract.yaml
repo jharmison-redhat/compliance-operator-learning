@@ -1,0 +1,21 @@
+apiVersion: "v1"
+kind: Pod
+metadata:
+  name: pv-extract
+spec:
+  containers:
+    - name: pv-extract-pod
+      image: registry.access.redhat.com/ubi8/ubi
+      command: ["sleep", "3000"]
+      volumeMounts:
+      - mountPath: "/nodes"
+        name: node-scan-vol
+      - mountPath: "/platform"
+        name: platform-scan-vol
+  volumes:
+    - name: node-scan-vol
+      persistentVolumeClaim:
+        claimName: node-stig
+    - name: platform-scan-vol
+      persistentVolumeClaim:
+        claimName: platform-scan

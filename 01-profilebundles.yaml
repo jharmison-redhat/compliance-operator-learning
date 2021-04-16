@@ -1,0 +1,18 @@
+---
+apiVersion: compliance.openshift.io/v1alpha1
+kind: ProfileBundle
+metadata:
+  name: upstream-ocp4
+  namespace: openshift-compliance
+spec:
+  contentFile: ssg-ocp4-ds.xml
+  contentImage: cac-build:latest
+---
+apiVersion: compliance.openshift.io/v1alpha1
+kind: ProfileBundle
+metadata:
+  name: upstream-rhcos4
+  namespace: openshift-compliance
+spec:
+  contentFile: ssg-rhcos4-ds.xml
+  contentImage: cac-build:latest
