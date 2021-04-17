@@ -143,3 +143,62 @@ oc get rule.compliance | grep -F upstream- | wc -l
 The XML has a ton of information in it - including remediation recommendations for these rules! Not all of the rules that we've just imported are for RHCOS, though. Some of them are for the Kubernetes platform on top - due to that privilege split.
 
 ## Suites - the basic block that ties profiles together.
+
+Because of the privilege split for runtime between the base operating system and the Kubernetes API, but the bundled versioning of content for them, it makes sense to run these scans at the same time but in different ways.
+
+The low level object that enables us to connect a collection of datastreams and a collection of targets is a `ComplianceSuite`. Let's specify a `ComplianceSuite` right now.
+
+```sh
+cat 02-compliancesuite.yaml
+oc apply -f 02-compliancesuite.yaml
+```
+
+We can watch as the Compliance Operator is notified of the new `ComplianceSuite` object, and begins to execute it.
+
+```sh
+oc get pods
+oc get compliancesuite -w
+```
+
+Notice that the `ComplianceSuite` scans we created had a `nodeSelector` set to only scan our workers, even though we had a toleration to enable scheduling on masters. You can choose to scan the masters, too, but for this demo we won't be.
+
+One of the phases you'll see on the `ComplianceSuite` is `AGGREGATING`. Because the Compliance Operator is able to work with every node at once, and run many scans on different parts of a system at once, the aggregation phase is used to collect all of the various scan results into buckets based on how we specified the scans.
+
+Let's make sure our `ComplianceSuite` scans have finished and go about looking at what we get from that.
+
+```sh
+while ! oc get compliancesuite stig-compliancesuite | grep -qF DONE; do
+    sleep 5
+done
+```
+
+## Results
+
+We can look at the results of every individual scan that we performed as part of our `ComplianceSuite`.
+
+```sh
+oc get compliancecheckresults
+```
+
+Importantly, these results are enriched with lots of metadata and kubernetes object labels to assist us with filtering them to look at only specific things.
+
+```sh
+# Just a look at our platform scan results
+oc get compliancecheckresults -l compliance.openshift.io/scan-name=platform-scan
+# Filter to only those that failed
+oc get compliancecheckresults -l compliance.openshift.io/scan-name=platform-scan,compliance.openshift.io/check-status=FAIL
+# Look at only the high severity failures for the platform scan
+oc get compliancecheckresults -l compliance.openshift.io/scan-name=platform-scan,compliance.openshift.io/check-status=FAIL,compliance.openshift.io/check-severity=high
+```
+
+This is _incredibly_ powerful. Remember that things we can run `oc` queries for are not things locked up in a proprietary way - these are Kubernetes resources, and anything that knows how to talk to the Kubernetes API can query for these same results. This means it's easy to enrich a dashboard with scan content if it can execute an HTTP query, and even easier if it's something that already knows how to talk to Kubernetes. You can envision, perhaps, a ServiceNow workflow that scrapes your `ComplianceCheckResults` for their status. Maybe a chat-ops system that enables a bot to notify someone in Slack, Teams, or something similar whenever a new result shows a failure.
+
+**But** (there's always a but), your auditors probably don't think this is particularly cool. Your auditors probably think this is obtuse, and want to coninue using the tooling they have been ordained to use for official audits of your compliance.
+
+### Raw results
+
+There was a key in the spec for our scan definitions about `rawResultStorage`. Let's look at what that did:
+
+```sh
+oc get pvc
+```

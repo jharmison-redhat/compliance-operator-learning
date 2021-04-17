@@ -1,9 +1,5 @@
 Remainder outline:
 
-- ComplianceSuite is a collection of Scan definitions that are paired together, but they're very low level
-- `cat 02-compliancesuite.yaml`
-- `oc apply -f 02-compliancesuite.yaml`
-- `oc get compliancesuite -w`
 - Results in here are nice if you know k8s - your auditors want checkfiles
 - `oc get pvc`
 
