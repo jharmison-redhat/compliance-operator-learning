@@ -142,7 +142,7 @@ oc get rule.compliance | grep -F upstream- | wc -l
 
 The XML has a ton of information in it - including remediation recommendations for these rules! Not all of the rules that we've just imported are for RHCOS, though. Some of them are for the Kubernetes platform on top - due to that privilege split.
 
-## Suites - the basic block that ties profiles together.
+## Suites - the basic block that ties profiles together
 
 Because of the privilege split for runtime between the base operating system and the Kubernetes API, but the bundled versioning of content for them, it makes sense to run these scans at the same time but in different ways.
 
@@ -197,8 +197,127 @@ This is _incredibly_ powerful. Remember that things we can run `oc` queries for 
 
 ### Raw results
 
-There was a key in the spec for our scan definitions about `rawResultStorage`. Let's look at what that did:
+There was a key in the spec for our scan definitions in the `ComplianceSuite` named `rawResultStorage`. Let's look at what that did:
 
 ```sh
 oc get pvc
 ```
+
+These PVCs store the raw XML output of the OpenSCAP scans that the Compliance Operator used to generate all of those cool Kubernetes objects for us. It's totally unmodified and works exactly like running OpenSCAP normally, it just happened inside containers and stored the output here to be harvested by us later. So, let's harvest it.
+
+```sh
+cat 03-extract.yaml
+```
+
+This is a simple pod specification to mount the PVCs used by the scans in our `ComplianceSuite` and wait around for a while. Here's a quick chunk of commands to spin these pods up and pull the data down locally:
+
+```sh
+# Remove any existing results directory
+rm -rf results
+# Make directories for the nodes and platform
+mkdir -p results/{nodes,platform}
+# Create our temporary pod
+oc apply -f 03-extract.yaml
+# Wait for it to run
+while ! oc get pod pv-extract | grep -qF Running; do
+    sleep 5
+done
+# Pull down the raw results directly
+for scan in nodes platform; do
+    oc cp pv-extract:/$scan/0/ results/$scan/
+done
+```
+
+The Compliance Operator puts them into bzip2 archives, so we'll need to extract those and see what we get:
+
+```sh
+for bzip in $(find results -type f -name \*.bzip2); do
+    xml=$(echo $bzip | rev | cut -d. -f2- | rev)
+    bzcat $bzip > $xml
+done
+find results -type f -name \*.xml
+```
+
+### From the perspective of your compliance auditor
+
+There is a tool often used for evaluating compliance status within the DoD, and sometimes within other organizations, published by the Defense Information Systems Agency (DISA). DISA's [STIGViewer](https://public.cyber.mil/stigs/srg-stig-tools/) is a multiplatform GUI application for looking at a STIG specification, planning a scan, manually entering scan information, viewing and commenting scan results, and generating reports from scans or groups of scans. You may already be very familiar with this tool.
+
+Handily, the XCCDF format used by OpenSCAP is standardized well beyond just OpenSCAP, and DISA STIGViewer already knows how to import and export to that format. Navigate the following menu items:
+
+1. Click `File`.
+1. Click `Import STIG`.
+1. Navigate to your .xml results files and select one, clicking `OK` or `Open`.
+1. Repeat the above steps to import the other type of STIG profile (`platform` or `nodes`), but only do one of each type (even if you have multiple node results).
+1. Ensure both STIG profiles on the top left are checked.
+
+    ![checked profiles](images/checked_profiles.png)
+
+1. Click `Checklist`.
+1. Click `Create Checklist - Check Marked STIG(s)`.
+1. You'll be brought into the `New Checklist` tab from the `STIG Explorer` tab automatically. This is a single instance of a review against the marked STIG profiles.
+1. Click `Import`.
+1. Click `XCCDF Results File`.
+1. Navigate to your .xml results files and select one, clicking `OK` or `Open` again.
+1. Repeat steps 9-11 for every other result file, including multiple copies of the same type. This will import all of the check results for the STIGS.
+1. Marvel at your beautiful graphics demonstrating compliance status. Most importantly, marvel at your happy auditors who don't have to learn new tooling to do their job on very new types of systems.
+
+    ![STIGViewer](images/STIGViewer.png)
+
+#### NOTE
+
+This is a `ComplianceSuite` running a very early version of the draft STIGs, but we have been fleshing out the content regularly and expect this continue to improve! It's already gotten much better coverage than shown here, using content from just a month ago at the time of this writing.
+
+## Remediations
+
+So, we do have many open findings on this scan. Let's single out an easy one to fix all by itself right now for the sake of brevity. Applying them all blindly is rarely a good idea in production, and we don't need to unwind where things go sideways while learning how it works.
+
+### A simple example remediation
+
+Let's understand this rule about allowing `tmux` to be a default logon shell:
+
+```sh
+oc describe rule rhcos4-no-tmux-in-shells | less
+```
+
+In the pager, search for the `Rationale` section by typing a forward slash (`/`) and then typing out the word. The description mentions that this enables a user to evade timeout restrictions on SSH sessions, so it should be disabled. Most people wouldn't do this anyways, and would use `bash` as their shell with `tmux` maybe launched manually or from their `.bashrc` conditionally, so the impact of disabling it on any system is pretty low. You can press the letter `q` on your keyboard to quit the pager.
+
+Let's explore what the Compliance Operator checked to define this as a finding. Open a debug shell on one of your workers through the OpenShift API (no need to expose SSH at all, so maybe you could `N/A` this finding and avoid making a change altogether!) with the following commands:
+
+```sh
+oc debug node/$(oc get node | awk '/worker/{print $1}' | head -1)
+chroot /host
+```
+
+Let's check the content on the `/etc/shells` file:
+
+```sh
+cat /etc/shells
+```
+
+You'll see, plain as day, that `tmux` is indeed present in the list of acceptable logon shells. Let's exit our debug shell and apply the remediation using the Compliance Operator.
+
+```sh
+exit # the chroot
+exit # the debug shell
+oc patch complianceremediations/node-stig-no-tmux-in-shells --patch '{"spec":{"apply":true}}' --type=merge
+```
+
+### How the Compliance Operator applies remediations to nodes
+
+While this remediation is applied by the operator, let's take a bit to understand and explore what it's doing. First, some background if you don't have it.
+
+1. OpenShift Container Platform 4 is designed to _include_ the operating system as part of the platform. It is not a thing you install on Red Hat Enterprise Linux (RHEL), it includes a variant of RHEL that is specially tuned for the act of providing this platform.
+1. The RHEL variant is called Red Hat CoreOS or RHCOS. RHCOS is designed to be functionally immutable, and it works using the `rpm-ostree` tooling to unpack and layer filesystems. This allows individual packages to be layered on top of a common base, or for a collection of updates to be layered above a base image.
+1. This design promotes _replacing_ things that are out of date, instead of _upgrading_ them. This doesn't work for things like configuration, private key files, or local logging. For this reason, several partitions are mounted as read/write directories on the filesystem, including most obviously (and pertinently) `/etc`.
+1. Because RHCOS is designed to be a component of the platform, the platform itself is capable of (and will) manage even those mutable files. This is accomplished through a component called the Machine Config Operator. The nice thing about using this operator is that it allows us to pool collections of machines together with common configuration items that apply to all of them, and it will ensure those configurations are applied to every node in that pool.
+1. To expose this functionality through the Kubernetes API, a `CustomResourceDefinition` named `MachineConfig` is provided - and those `MachineConfigs` can contain everything from file content to kernel command line arguments to be used at boot. When a `MachineConfig` is applied to a pool, all of the nodes in that pool are rebooted one at a time in a rolling update fashion and the new configuration is provided to them at boot time. If you add new nodes to a pool, they will get the rendered configuration through the pool right away.
+
+So, we told the Compliance Operator to remediate the content of this file on all of our nodes. Rather than SSHing into the nodes and calling something like `sed` on the file, like some other remediation tools might, it will simply define the new desired state of that file and allow the Machine Config Operator to do its job and reconcile those nodes. The change to the pool will trigger a rolling update across the nodes in that pool, and cause any new nodes that get instantiated to automatically have this new desired configuration.
+
+To see the newly created `MachineConfig`, we can run this:
+
+```sh
+oc get machineconfig 75-node-stig-no-tmux-in-shells -o yaml
+```
+
+This looks pretty straightforward
