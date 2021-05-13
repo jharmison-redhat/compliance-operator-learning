@@ -32,7 +32,7 @@ The operator is now successfully installed.
 
 After operator installation you'll be presented with an option to view the installed operator. Click that button and you'll see the provided APIs. These represent the Kubernetes objects that the Operator understands, tracks, and manipulates in support of your desired action. Some of them are pre-downloaded as part of installation. Along the top there are options to click these different APIs as browsable tabs, instead of clickable cards.
 
-[!images/APIs.png]
+![APIs](images/APIs.png)
 
 Click on the "All instances" tab to see these preinstalled bits of content.
 
@@ -75,7 +75,9 @@ First off, the [Compliance As Code (CaC) project on GitHub](https://github.com/C
 Included in the CaC repository is an OpenShift [BuildConfig](https://github.com/ComplianceAsCode/content/blob/master/ocp-resources/content-cluster-build.yaml) that enables you to use the native features of OCP to build the compliance bundle images that the `ProfileBundles` reference. You can apply the default BuildConfig (as of the writing of this guide) by following these steps:
 
 - On the navigation bar at the top, click the Plus icon
-  [!images/navbar.png]
+
+    ![navbar](images/navbar.png)
+
 - Paste the following and click create:
 
     ```sh
