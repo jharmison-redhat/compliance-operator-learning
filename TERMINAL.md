@@ -313,12 +313,59 @@ While this remediation is applied by the operator, let's take a bit to understan
 1. Because RHCOS is designed to be a component of the platform, the platform itself is capable of (and will) manage even those mutable files. This is accomplished through a component called the Machine Config Operator. The nice thing about using this operator is that it allows us to pool collections of machines together with common configuration items that apply to all of them, and it will ensure those configurations are applied to every node in that pool.
 1. To expose this functionality through the Kubernetes API, a `CustomResourceDefinition` named `MachineConfig` is provided - and those `MachineConfigs` can contain everything from file content to kernel command line arguments to be used at boot. When a `MachineConfig` is applied to a pool, all of the nodes in that pool are rebooted one at a time in a rolling update fashion and the new configuration is provided to them at boot time. If you add new nodes to a pool, they will get the rendered configuration through the pool right away.
 
-So, we told the Compliance Operator to remediate the content of this file on all of our nodes. Rather than SSHing into the nodes and calling something like `sed` on the file, like some other remediation tools might, it will simply define the new desired state of that file and allow the Machine Config Operator to do its job and reconcile those nodes. The change to the pool will trigger a rolling update across the nodes in that pool, and cause any new nodes that get instantiated to automatically have this new desired configuration.
+Let's watch the nodes reboot:
 
-To see the newly created `MachineConfig`, we can run this:
+```sh
+oc get nodes -w
+```
+
+So, we told the Compliance Operator to remediate the content of this file on all of our nodes. Rather than SSHing into the nodes and calling something like `sed` on the file, like some other remediation tools might, it will simply define the new desired state of that file and allow the Machine Config Operator to do its job and reconcile those nodes. The change to the pool has triggered a rolling update across the nodes in that pool, and now any new nodes that get instantiated will automatically have this new desired configuration.
+
+You can `Ctrl+C` to cancel the watch, or open a new terminal. To see the newly created `MachineConfig`, we can run this:
 
 ```sh
 oc get machineconfig 75-node-stig-no-tmux-in-shells -o yaml
 ```
 
-This looks pretty straightforward
+This looks pretty straightforward. Some base64 encoded file content. You can probably guess that it's just the list of acceptable login shells, minus `tmux`. This MachineConfig has been added to the worker pool thanks to our applied remediation.
+
+Let's see what's going on with our `/etc/shells` files on the nodes:
+
+```sh
+for node in $(oc get node | awk '/worker/{print $1}'); do
+    echo -e "\nNODE: $node"
+    oc debug node/$node -- cat /host/etc/shells 2>/dev/null
+done
+```
+
+Depending on when you've run that, you may see some or all of the /etc/shells files updated. Feel free to continue running that loop over time to monitor the rollout if you got here before any updated and are looking for the "I Believe" button.
+
+## What you should actually do
+
+Running a lower-level scan via a `ComplianceSuite` is good for understanding the building blocks of the Compliance Operator, but you shouldn't really need to muck with the details of which file from the profile bundles, and which profile in that file, you're looking to apply.
+
+### How to run scans the right way in production
+
+The Compliance Operator gives you a layered set of abstractions to make running these scans much easier, and to do them in sensible ways - like automatic scheduled scans.
+
+```sh
+cat 04-scansetting.yaml
+```
+
+Here we've defined a default scan schedule via the `ScanSetting` resource type, and bound it to the STIG profiles via the `ScanSettingBinding`. Two resources, daily scans - automatically. We're not going to apply this (because I don't plan on hanging out until 1AM when it's scheduled to show it to you), but you can see that this definition is very simple and gives us a lot of flexibility. You can maintain your own profiles, inherit updates to profiles through `ProfileBundles` included in the operator, or have the bundles built automatically with a `BuildConfig` that runs on a schedule, similar to the one we manually kicked off earlier - then bind those directly to the schedule of your choosing on the nodes of your choosing via selectors. The `rotation` key lets us keep only the most recent X number of scan results, so we can keep some form of rolling history. If you're trying to export these to some other system (drop them in an S3 bucket or some blob store, push report metadata to a SIEM, etc.), you can do some of that with the Compliance Operator itself - or write up an easy `CronJob` template to scrape the results from that PVC after scan completion and do whatever you'd like.
+
+### The real world rejects your compliance reality
+
+We didn't apply all of the remediations today in part because it was more expedient for this walkthrough to simply work with this small rule. But another part of the reason is that you will never, ever, apply every STIG blindly in production - people don't just do that. Sometimes a STIG will break functionality you're counting on, or integration with some third party tool that needs something exposed.
+
+In compliance, there are levels of acceptable risk that may be accepted because the tradeoffs are worth it. Non-compliance with a STIG does not mean your system is unable to be accredited. Perhaps it's "secure enough" for now and you need it working, but you're going to work on continuing to improve the security and are simply waiting for a few blockers to clear - this is what the Plan of Action and Milestones (PoA&M) process is for. Maybe some STIG doesn't apply because you've completely mitigated it through some other means, and the STIG for this one product just doesn't have the context to know that - but your IAM, AO, and auditor do.
+
+The process that is already in use throughout the compliance space is called "Tailoring." You might be familiar with this already. The STIG, if it doesn't fit your environment perfectly, simply needs to be tailored a bit. You should look at the [Compliance Operator documentation on tailoring](https://docs.openshift.com/container-platform/4.7/security/compliance_operator/compliance-operator-tailor.html) directly to understand how to do this - but know that it can and should be done. If your auditor wants to craft their own XCCDF tailoring file using their own tooling, and you'd like to work that into your scans instead of translating to the Custom Resource, [you can do that, too](https://docs.openshift.com/container-platform/4.7/security/compliance_operator/compliance-operator-advanced.html#compliance-raw-tailored_compliance-advanced).
+
+## Conclusion
+
+The OpenShift Compliance Operator is designed to give an OpenShift administrator a Kubernetes-native way of working with their compliance scans, remediations, and reporting. This is great if you can embrace these patterns and all this new tooling, but the reality is the existing cybersecurity personnell are already familiar with the tooling that these new ways of working are _built on top of_.
+
+Understanding how these new abstractions are composed, and what's going on under the hood, will likely make you much more comfortable with embracing those abstractions.
+
+Compatibility with all of the existing tooling around you is a huge plus, and will help your auditor sleep better at night - even while you're sleeping better because of your newer, more powerful platform.
