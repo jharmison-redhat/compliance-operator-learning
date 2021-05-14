@@ -217,15 +217,16 @@ rm -rf results
 # Make directories for the nodes and platform
 mkdir -p results/{nodes,platform}
 # Create our temporary pod
-oc apply -f 03-extract.yaml
+oc apply -f 03-extract.yaml -n openshift-compliance
 # Wait for it to run
-while ! oc get pod pv-extract | grep -qF Running; do
+while ! oc get pod pv-extract -n openshift-compliance | grep -qF Running; do
     sleep 5
 done
 # Pull down the raw results directly
 for scan in nodes platform; do
-    oc cp pv-extract:/$scan/0/ results/$scan/
+    oc cp pv-extract:/$scan/0/ results/$scan/ -n openshift-compliance
 done
+oc delete pod pv-extract -n openshift-compliance
 ```
 
 The Compliance Operator puts them into bzip2 archives, so we'll need to extract those and see what we get:
