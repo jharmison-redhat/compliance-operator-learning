@@ -3,7 +3,8 @@
 ## Prerequisites
 
 - A connected OpenShift 4.7 cluster installed and reachable
-  - (This could be a disconnected cluster but you would have to pre-mirror some content for the purposes of this exploration)
+  - This could be a disconnected cluster but you would have to pre-mirror some content for the purposes of this exploration
+  - This cannot be a CodeReady Containers cluster as part of what we're doing is rolling out updated `MachineConfigs`, which doesn't work on CRC.
 - A logged in `User` with a `ClusterRoleBinding` for `cluster-admin` applied.
   - You can run the following to check your cluster-bound `ClusterRoles`:
 
