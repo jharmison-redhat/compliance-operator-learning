@@ -363,6 +363,16 @@ In compliance, there are levels of acceptable risk that may be accepted because 
 
 The process that is already in use throughout the compliance space is called "Tailoring." You might be familiar with this already. The STIG, if it doesn't fit your environment perfectly, simply needs to be tailored a bit. You should look at the [Compliance Operator documentation on tailoring](https://docs.openshift.com/container-platform/4.7/security/compliance_operator/compliance-operator-tailor.html) directly to understand how to do this - but know that it can and should be done. If your auditor wants to craft their own XCCDF tailoring file using their own tooling, and you'd like to work that into your scans instead of translating to the Custom Resource, [you can do that, too](https://docs.openshift.com/container-platform/4.7/security/compliance_operator/compliance-operator-advanced.html#compliance-raw-tailored_compliance-advanced).
 
+## Clean up
+
+If you'd like to remove the ComplianceOperator and everything you've done up to this point (except the applied MachineConfig... that will stick around), you can run the following:
+
+```sh
+./cleanup.sh
+```
+
+It will gracefully delete all of the Custom Resources we created, then remove the operator, then clean up CRDs that have been left hanging around.
+
 ## Conclusion
 
 The OpenShift Compliance Operator is designed to give an OpenShift administrator a Kubernetes-native way of working with their compliance scans, remediations, and reporting. This is great if you can embrace these patterns and all this new tooling, but the reality is the existing cybersecurity personnell are already familiar with the tooling that these new ways of working are _built on top of_.
