@@ -125,7 +125,7 @@ There are more profiles in the upstream than in the supported downstream - becau
 
 ### Looking into a profile
 
-Let's see what's in our new stig profile.
+Let's see what's in our new RHCOS4 STIG profile.
 
 ```sh
 oc describe profile.compliance upstream-rhcos4-stig | less
