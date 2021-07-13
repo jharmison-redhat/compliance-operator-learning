@@ -1,0 +1,38 @@
+apiVersion: compliance.openshift.io/v1alpha1
+kind: ComplianceSuite
+metadata:
+  name: stig-compliancesuite
+  namespace: openshift-compliance
+spec:
+  scans:
+    - content: ssg-rhcos4-ds.xml
+      contentImage: 'cac-build:latest'
+      name: node-stig
+      nodeSelector:
+        node-role.kubernetes.io/worker: ''
+      profile: xccdf_org.ssgproject.content_profile_stig
+      rawResultStorage:
+        pvAccessModes:
+          - ReadWriteOnce
+        rotation: 3
+        size: 1Gi
+      scanTolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+      scanType: Node
+    - content: ssg-ocp4-ds.xml
+      contentImage: 'cac-build:latest'
+      name: platform-scan
+      profile: xccdf_org.ssgproject.content_profile_moderate
+      rawResultStorage:
+        pvAccessModes:
+          - ReadWriteOnce
+        rotation: 3
+        size: 1Gi
+      scanTolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+      scanType: Platform
+  schedule: 0 1 * * *
